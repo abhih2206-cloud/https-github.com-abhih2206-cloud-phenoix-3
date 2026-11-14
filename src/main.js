@@ -24,8 +24,34 @@ const navItems = [
   ["science", "Science center"], ["history", "Mission history"],
   ["settings", "Settings"], ["about", "About"]
 ];
+const PLANETS = [
+  { name: "Moon", code: "LUNA", grav: "1.62 m/s²", temp: "−173 to 127 °C", type: "SURFACE · CREWED", desc: "Our closest neighbor. A first step for science and a giant leap for this crew.", glyph: "◐" },
+  { name: "Mercury", code: "MERCURY", grav: "3.70 m/s²", temp: "−180 to 430 °C", type: "ORBITAL SCIENCE", desc: "A high-temperature survey of the innermost rocky world.", glyph: "◕" },
+  { name: "Venus", code: "VENUS", grav: "8.87 m/s²", temp: "≈ 465 °C", type: "ATMOSPHERIC PROBE", desc: "Dense atmosphere, crushing pressure and intense surface heat. Science here is best done from orbit or through the clouds.", glyph: "◉" },
+  { name: "Earth", code: "TERRA", grav: "9.81 m/s²", temp: "REFERENCE", type: "LAUNCH & RETURN", desc: "Home base and a training ground for launch, return and mission readiness.", glyph: "◉" },
+  { name: "Mars", code: "ARES", grav: "3.71 m/s²", temp: "−125 to 20 °C", type: "ROVER · SURFACE", desc: "Red dunes, thin air and a world of future exploration. A classic science and rover mission.", glyph: "●" },
+  { name: "Jupiter", code: "ZEUS", grav: "24.79 m/s²", temp: "CLOUD TOPS ≈ −110 °C", type: "ORBITER · PROBE", desc: "A radiation-aware orbital mission to the gas giant. No solid surface landing is planned.", glyph: "◉" },
+  { name: "Saturn", code: "CRONUS", grav: "10.44 m/s²", temp: "CLOUD TOPS ≈ −140 °C", type: "RING OBSERVATION", desc: "Navigate the ring plane and study a distant ice-and-gas giant from orbit.", glyph: "◉" },
+  { name: "Uranus", code: "OURANOS", grav: "8.69 m/s²", temp: "≈ −195 °C", type: "DEEP-SPACE OBSERVATION", desc: "A flyby and atmospheric study of the ice giant at the edge of the inner system.", glyph: "◉" },
+  { name: "Neptune", code: "POSEIDON", grav: "11.15 m/s²", temp: "≈ −200 °C", type: "DEEP-SPACE OBSERVATION", desc: "An atmospheric observation mission at the far edge of the planetary system.", glyph: "◉" }
+];
 const format = (number, digits = 0) => Number(number || 0).toLocaleString("en-US", { maximumFractionDigits: digits });
 const inLoadout = (id) => state.loadout.includes(id);
+
+function getMissionName(destination = state.destination) {
+  const missionNames = {
+    Moon: "Lunar Frontier",
+    Mercury: "Mercury Survey",
+    Venus: "Venus Atmosphere",
+    Earth: "Terra Return",
+    Mars: "Ares Frontier",
+    Jupiter: "Jovian Survey",
+    Saturn: "Saturn Ring",
+    Uranus: "Uranian Survey",
+    Neptune: "Poseidon Outbound"
+  };
+  return `${missionNames[destination] || `${destination} Frontier`} 01`;
+}
 
 function shell() {
   app.innerHTML = `
@@ -67,17 +93,19 @@ function statCard(label, value, unit, icon, tone = "") {
 function renderControl() {
   if (state.phase === "complete") {
     const latest = state.progression.missions[state.progression.missions.length - 1];
-    return `${header("FLIGHT OPERATIONS / DEBRIEF", "Mission accomplished", "Lunar Frontier 01 is complete. Your science return is safely logged.")}
-      <div class="results-card glass-panel"><div class="result-seal">✓</div><div class="eyebrow">MISSION DEBRIEF · MOON</div><h2>One small step.<br/><em>A whole new frontier.</em></h2><p>Pathfinder delivered its payload, restored both surface systems and returned a lunar sample.</p><div class="result-score"><span>MISSION SCORE</span><b>${format(latest?.score || 0)}<small> PTS</small></b><i>MISSION COMPLETE</i></div><div class="result-grid">${telemetry("OBJECTIVES", "3 / 3 COMPLETE")}${telemetry("SCIENCE RETURNED", `${format(state.progression.science)} UNITS`)}${telemetry("FUEL REMAINING", `${format(state.flight.fuel, 1)}%`)}${telemetry("CREW CONDITION", `${format(state.astronaut.oxygen)}% O₂ · NOMINAL`)}</div><div class="result-actions"><button class="button-primary" data-action="select-moon">FLY ANOTHER SORTIE <span>↗</span></button><button class="button-quiet" data-action="navigate" data-screen="history">VIEW MISSION LOG →</button></div><div class="science-note"><span>i</span> Flight, score and suit telemetry are simulated for gameplay. Mission record saved locally on this device.</div></div>`;
+    const destinationName = state.destination || "Moon";
+    return `${header("FLIGHT OPERATIONS / DEBRIEF", "Mission accomplished", `${getMissionName(destinationName)} is complete. Your science return is safely logged.`)}
+      <div class="results-card glass-panel"><div class="result-seal">✓</div><div class="eyebrow">MISSION DEBRIEF · ${destinationName.toUpperCase()}</div><h2>One small step.<br/><em>A whole new frontier.</em></h2><p>Pathfinder delivered its payload, restored all surface systems and returned a science sample for ${destinationName}.</p><div class="result-score"><span>MISSION SCORE</span><b>${format(latest?.score || 0)}<small> PTS</small></b><i>MISSION COMPLETE</i></div><div class="result-grid">${telemetry("OBJECTIVES", "3 / 3 COMPLETE")}${telemetry("SCIENCE RETURNED", `${format(state.progression.science)} UNITS`)}${telemetry("FUEL REMAINING", `${format(state.flight.fuel, 1)}%`)}${telemetry("CREW CONDITION", `${format(state.astronaut.oxygen)}% O₂ · NOMINAL`)}</div><div class="result-actions"><button class="button-primary" data-action="select-moon">FLY ANOTHER SORTIE <span>↗</span></button><button class="button-quiet" data-action="navigate" data-screen="history">VIEW MISSION LOG →</button></div><div class="science-note"><span>i</span> Flight, score and suit telemetry are simulated for gameplay. Mission record saved locally on this device.</div></div>`;
   }
   const progress = state.phase === "briefing" ? 9 : state.phase === "engineering" ? 24 : state.phase === "inspection" ? 38 : state.phase === "countdown" ? 53 : ["launch", "flight"].includes(state.phase) ? 70 : state.phase === "orbit" ? 82 : state.phase === "complete" ? 100 : 91;
   const phaseLabel = state.phase === "briefing" ? "MISSION BRIEFING" : state.phase === "complete" ? "MISSION COMPLETE" : `${state.phase.toUpperCase()} SEQUENCE`;
   const stats = getStats(state);
-  return `${header("FLIGHT OPERATIONS / OVERVIEW", "Mission control", "Your next horizon is waiting. The Moon is go for launch.")}
+  const activeMission = getMissionName();
+  return `${header("FLIGHT OPERATIONS / OVERVIEW", "Mission control", `Your next horizon is waiting. ${state.destination} is go for launch.`)}
     <div class="control-grid">
       <div class="control-left">
-        <div class="mission-banner"><div class="banner-top"><span class="tag cyan">ACTIVE MISSION</span><span class="mission-id">OF-M01 · 2026</span></div><h2>Lunar<br/>Frontier <span>01</span></h2><p>Deliver a science payload to the lunar surface. Deploy, repair, discover.</p><div class="progress-label"><span>${phaseLabel}</span><b>${progress}%</b></div><div class="progress-track"><span style="width:${progress}%"></span></div><button class="button-primary" data-action="continue">CONTINUE MISSION <span>↗</span></button></div>
-        <div class="quick-destinations"><div class="section-title">DESTINATIONS <span>01 / 09 AVAILABLE</span></div><button class="destination-mini" data-action="navigate" data-screen="missions"><span class="moon-thumb">◐</span><span><b>MOON</b><small>384,400 KM · SURFACE MISSION</small></span><span class="arr">↗</span></button><div class="locked-mini">＋ 8 destinations locked <span>VIEW ALL</span></div></div>
+        <div class="mission-banner"><div class="banner-top"><span class="tag cyan">ACTIVE MISSION</span><span class="mission-id">${state.destination.toUpperCase()} · 2026</span></div><h2>${activeMission.split(" ").slice(0, 2).join("<br/>") || activeMission}<span>01</span></h2><p>Deliver a science payload to ${state.destination}. Deploy, repair, discover.</p><div class="progress-label"><span>${phaseLabel}</span><b>${progress}%</b></div><div class="progress-track"><span style="width:${progress}%"></span></div><button class="button-primary" data-action="continue">CONTINUE MISSION <span>↗</span></button></div>
+        <div class="quick-destinations"><div class="section-title">DESTINATIONS <span>${PLANETS.length} / ${PLANETS.length} AVAILABLE</span></div>${PLANETS.map((planet) => `<button class="destination-mini" data-action="select-destination" data-destination="${planet.name}"><span class="moon-thumb">${planet.glyph}</span><span><b>${planet.name.toUpperCase()}</b><small>${planet.type}</small></span><span class="arr">↗</span></button>`).join("")}<div class="locked-mini">ALL DESTINATIONS OPEN <span>SELECT</span></div></div>
       </div>
       <div class="control-right">
         ${surface(`<div class="panel-top"><span>VEHICLE STATUS</span><span class="tag ${stats.twr >= 1.1 ? "green" : "amber"}">${stats.twr >= 1.1 ? "GO" : "CHECK"}</span></div><div class="vehicle-name"><span class="vehicle-symbol">▲</span><div><b>PATHFINDER Mk.I</b><small>CREWED LUNAR VEHICLE</small></div></div><div class="vehicle-meter"><div class="meter-copy"><span>FLIGHT READINESS</span><b>${stats.twr >= 1.1 ? "86" : "42"}<small>%</small></b></div><div class="meter-line"><i style="width:${stats.twr >= 1.1 ? 86 : 42}%"></i></div></div><div class="vehicle-pairs"><span>STAGE <b>${String(state.flight.stage).padStart(2, "0")}</b></span><span>FUEL <b>${format(state.flight.fuel)}%</b></span></div><button class="button-quiet" data-action="navigate" data-screen="engineering">OPEN VEHICLE ASSEMBLY <span>→</span></button>`)}
@@ -93,19 +121,9 @@ function timelineStep(number, text, done) {
 }
 
 function renderMissions() {
-  const destinations = [
-    { name: "Moon", code: "LUNA", state: "AVAILABLE", grav: "1.62 m/s²", temp: "−173 to 127 °C", type: "SURFACE · CREWED", desc: "Our closest neighbor. A first step for science and a giant leap for this crew.", glyph: "◐", open: true },
-    { name: "Mars", code: "ARES", state: "LOCKED", grav: "3.71 m/s²", temp: "−125 to 20 °C", type: "ROVER · SURFACE", desc: "Red dunes, thin air and a world of questions. A future mission; the Moon is playable now.", glyph: "●" },
-    { name: "Mercury", code: "HERMES", state: "LOCKED", grav: "3.70 m/s²", temp: "−180 to 430 °C", type: "ORBITAL SCIENCE", desc: "A high-temperature orbital survey of the innermost rocky world.", glyph: "◕" },
-    { name: "Venus", code: "APHRODITE", state: "LOCKED", grav: "8.87 m/s²", temp: "≈ 465 °C", type: "ATMOSPHERIC PROBE", desc: "A robotic atmospheric study. No surface landing is planned.", glyph: "◉" },
-    { name: "Jupiter", code: "ZEUS", state: "LOCKED", grav: "24.79 m/s²", temp: "CLOUD TOPS ≈ −110 °C", type: "ORBITER · PROBE", desc: "A radiation-aware orbital mission to the gas giant. Not a solid-surface destination.", glyph: "◉" },
-    { name: "Saturn", code: "CRONUS", state: "LOCKED", grav: "10.44 m/s²", temp: "CLOUD TOPS ≈ −140 °C", type: "RING OBSERVATION", desc: "Navigate the ring plane and study this distant gas giant from orbit.", glyph: "◉" },
-    { name: "Uranus", code: "OURANOS", state: "LOCKED", grav: "8.69 m/s²", temp: "≈ −195 °C", type: "DEEP-SPACE OBSERVATION", desc: "A flyby and atmospheric study of the ice giant. No solid landing.", glyph: "◉" },
-    { name: "Neptune", code: "POSEIDON", state: "LOCKED", grav: "11.15 m/s²", temp: "≈ −200 °C", type: "DEEP-SPACE OBSERVATION", desc: "An atmospheric observation mission at the edge of the planetary system.", glyph: "◉" },
-    { name: "Earth", code: "TERRA", state: "HOME", grav: "9.81 m/s²", temp: "REFERENCE", type: "LAUNCH & RETURN", desc: "Home base and launch site. Earth is your point of departure.", glyph: "◉" }
-  ];
+  const destinations = PLANETS.map((world) => ({ ...world, state: "AVAILABLE", open: true }));
   return `${header("MISSION CATALOG / DESTINATION SELECT", "Choose your horizon", "Read the environment before committing the vehicle. Scientific reference values are shown for context.")}
-    <div class="destination-grid">${destinations.map((world, index) => `<article class="planet-card ${world.open ? "selected" : ""} ${world.state === "LOCKED" ? "locked" : ""}"><div class="planet-art planet-${world.code.toLowerCase()}"><span>${world.glyph}</span><small>${String(index + 1).padStart(2, "0")} / DESTINATION</small></div><div class="planet-card-body"><div class="planet-title"><h3>${world.name}</h3><span class="tag ${world.open ? "green" : "dim"}">${world.state}</span></div><div class="planet-type">${world.type}</div><p>${world.desc}</p><div class="planet-facts"><span>GRAVITY <b>${world.grav}</b></span><span>TEMPERATURE <b>${world.temp}</b></span></div>${world.open ? `<button class="button-primary compact" data-action="select-moon">SELECT MOON <span>↗</span></button>` : `<button class="button-quiet compact" ${world.state === "HOME" ? 'data-action="navigate" data-screen="control"' : 'data-action="locked-destination"'}>${world.state === "HOME" ? "LAUNCH SITE" : "VIEW REQUIREMENTS"} <span>→</span></button>`}</div></article>`).join("")}</div>
+    <div class="destination-grid">${destinations.map((world, index) => `<article class="planet-card ${state.destination === world.name ? "selected" : ""}"><div class="planet-art planet-${world.code.toLowerCase()}"><span>${world.glyph}</span><small>${String(index + 1).padStart(2, "0")} / DESTINATION</small></div><div class="planet-card-body"><div class="planet-title"><h3>${world.name}</h3><span class="tag green">AVAILABLE</span></div><div class="planet-type">${world.type}</div><p>${world.desc}</p><div class="planet-facts"><span>GRAVITY <b>${world.grav}</b></span><span>TEMPERATURE <b>${world.temp}</b></span></div><button class="button-primary compact" data-action="select-destination" data-destination="${world.name}">${state.destination === world.name ? "SELECTED" : `SELECT ${world.name.toUpperCase()}`} <span>↗</span></button></div></article>`).join("")}</div>
     <div class="science-note"><span>i</span> <b>SCIENTIFIC CONTEXT</b> Planet facts are approximate reference values for educational context, not live mission data. Gameplay telemetry is simulated.</div>`;
 }
 
@@ -116,7 +134,7 @@ function renderEngineering() {
   const parts = Object.entries(PARTS).filter(([, part]) => activeCategory === "ALL" || part.category.toUpperCase() === activeCategory);
   return `${header("VEHICLE SYSTEMS / CONFIGURATION", "Engineering workshop", "Every module changes the actual vehicle. Values are an educational gameplay model.")}
     <div class="engineering-grid">
-      <div class="component-panel glass-panel"><div class="panel-top"><span>PART CATALOG</span><span class="tag dim">${Object.keys(PARTS).length} MODULES</span></div><div class="category-tabs">${categories.map((category) => `<button data-action="category" data-category="${category}" class="${activeCategory === category ? "active" : ""}">${category}</button>`).join("")}</div><div class="parts-list">${parts.map(([id, part]) => `<button class="part-row ${inLoadout(id) ? "installed" : ""}" data-action="toggle-part" data-part="${id}"><span class="part-glyph">${part.icon}</span><span class="part-info"><b>${part.name}</b><small>${part.description}</small><small class="part-meta">${part.category.toUpperCase()} · ${part.mass} T · SIMULATED</small></span><span class="part-toggle">${inLoadout(id) ? "−" : "+"}</span></button>`).join("")}</div><div class="catalog-foot"><span>MODULE SELECTION</span><b>${state.loadout.length} INSTALLED</b></div></div>
+      <div class="component-panel glass-panel"><div class="panel-top"><span>PART CATALOG</span><span class="tag dim">${Object.keys(PARTS).length} MODULES</span></div><div class="category-tabs">${categories.map((category) => `<button data-action="category" data-category="${category}" class="${activeCategory === category ? "active" : ""}">${category}</button>`).join("")}</div><div class="parts-list">${parts.map(([id, part]) => `<button class="part-row ${inLoadout(id) ? "installed" : ""}" data-action="toggle-part" data-part="${id}"><span class="part-glyph">${part.icon}</span><span class="part-info"><b>${part.name}</b><small>${part.description}</small><small class="part-meta">${part.category.toUpperCase()} · ${part.mass} T · SIMULATED</small></span><span class="part-toggle">${inLoadout(id) ? "1" : "0"}</span></button>`).join("")}</div><div class="catalog-foot"><span>MODULE SELECTION</span><b>${state.loadout.length} INSTALLED</b></div></div>
       <div class="assembly-center"><div class="assembly-badge"><span class="live-dot"></span> PATHFINDER Mk.I <small>3D ASSEMBLY VIEW</small></div><div class="assembly-controls"><button data-action="camera-reset" title="Reset camera">⊙</button><button data-action="camera-mode" title="Change camera">◫</button></div><div class="assembly-tip">DRAG · ORBIT <i>SCROLL · ZOOM</i></div></div>
       <div class="stats-panel glass-panel"><div class="panel-top"><span>ENGINEER'S REPORT</span><span class="tag cyan">LIVE</span></div><div class="vehicle-mini"><b>▲ &nbsp; PATHFINDER Mk.I</b><small>CREWED LUNAR ASCENT VEHICLE</small></div><div class="stat-list">${engineeringStat("Total mass", `${format(stats.mass, 1)} t`, "◧")}${engineeringStat("Fuel capacity", `${stats.capacity} t`, "◉")}${engineeringStat("Current fuel", `${format(state.flight.fuel)}%`, "◉")}${engineeringStat("Max thrust", `${format(stats.thrust, 1)} MN`, "↟")}${engineeringStat("Thrust / weight", `${format(stats.twr, 2)}`, "⌁")}${engineeringStat("Est. delta-v", `${format(stats.deltaV)} m/s`, "∆v")}${engineeringStat("Electrical power", `${stats.power} kW`, "ϟ")}${engineeringStat("Thermal protection", `${stats.heat}%`, "◈")}${engineeringStat("Radiation protection", `${stats.radiation}%`, "⬟")}${engineeringStat("Life support", `${stats.life} crew`, "♡")}${engineeringStat("Comm. range", `${stats.comms} kkm`, "⌁")}${engineeringStat("Landing capability", `${stats.landing}%`, "⌑")}</div><div class="stats-disclaimer">SIMULATED VALUES · EDUCATIONAL MODEL</div><button class="button-primary" data-action="to-inspection">RUN PRE-LAUNCH CHECK <span>↗</span></button></div>
     </div>`;
@@ -130,7 +148,7 @@ function renderInspection() {
   const result = inspection(state);
   const pass = result.filter((item) => item.ok).length;
   return `${header("FLIGHT READINESS / SYSTEMS TEST", "Pre-launch inspection", "Verify every mission-critical system before the countdown begins.")}
-    <div class="inspection-layout"><div class="inspection-summary glass-panel"><div class="summary-icon">${pass === result.length ? "✓" : "!"}</div><div class="eyebrow">VEHICLE READINESS</div><h2>${pass === result.length ? "GO FOR LAUNCH" : "HOLD FOR CHECKS"}</h2><p>${pass} of ${result.length} flight-critical checks passed.</p><div class="progress-track"><span style="width:${pass / result.length * 100}%"></span></div><div class="launch-window"><span>MISSION</span><b>LUNAR FRONTIER 01</b><span>VEHICLE</span><b>PATHFINDER Mk.I</b><span>EST. LIFTOFF</span><b>ON YOUR COMMAND</b></div>${pass === result.length ? '<button class="button-primary" data-action="start-countdown">INITIATE COUNTDOWN <span>↗</span></button>' : '<button class="button-primary disabled" disabled>RESOLVE CRITICAL FAILURES</button>'}<button class="button-quiet" data-action="navigate" data-screen="engineering">← RETURN TO ENGINEERING</button></div><div class="check-list">${result.map((item, index) => `<button class="check-row ${item.ok ? "pass" : "fail"}" data-action="check-detail" data-index="${index}"><span class="check-status">${item.ok ? "✓" : "!"}</span><span><b>${item.name}</b><small>${item.ok ? "System verified · ready for flight" : item.reason}</small></span><span class="check-result">${item.ok ? "PASS" : "FAIL"}</span><span class="check-arrow">›</span></button>`).join("")}<div class="science-note"><span>i</span> Inspection checks are evaluated from the installed spacecraft modules. No launch is allowed while a critical check fails.</div></div></div>`;
+    <div class="inspection-layout"><div class="inspection-summary glass-panel"><div class="summary-icon">${pass === result.length ? "✓" : "!"}</div><div class="eyebrow">VEHICLE READINESS</div><h2>${pass === result.length ? "GO FOR LAUNCH" : "HOLD FOR CHECKS"}</h2><p>${pass} of ${result.length} flight-critical checks passed.</p><div class="progress-track"><span style="width:${pass / result.length * 100}%"></span></div><div class="launch-window"><span>MISSION</span><b>${getMissionName(state.destination)}</b><span>VEHICLE</span><b>PATHFINDER Mk.I</b><span>EST. LIFTOFF</span><b>ON YOUR COMMAND</b></div>${pass === result.length ? '<button class="button-primary" data-action="start-countdown">INITIATE COUNTDOWN <span>↗</span></button>' : '<button class="button-primary disabled" disabled>RESOLVE CRITICAL FAILURES</button>'}<button class="button-quiet" data-action="navigate" data-screen="engineering">← RETURN TO ENGINEERING</button></div><div class="check-list">${result.map((item, index) => `<button class="check-row ${item.ok ? "pass" : "fail"}" data-action="check-detail" data-index="${index}"><span class="check-status">${item.ok ? "✓" : "!"}</span><span><b>${item.name}</b><small>${item.ok ? "System verified · ready for flight" : item.reason}</small></span><span class="check-result">${item.ok ? "PASS" : "FAIL"}</span><span class="check-arrow">›</span></button>`).join("")}<div class="science-note"><span>i</span> Inspection checks are evaluated from the installed spacecraft modules. No launch is allowed while a critical check fails.</div></div></div>`;
 }
 
 function renderFlight() {
@@ -139,15 +157,15 @@ function renderFlight() {
   if (state.phase === "countdown") {
     const remaining = Math.max(0, Math.ceil(f.countdown || 0));
     return `${header("LAUNCH SEQUENCE / L-01", "All stations, go", "Flight director has control. Countdown is live.")}
-      <div class="launch-layout"><div class="countdown-card glass-panel"><div class="eyebrow">LUNAR FRONTIER 01 · T MINUS</div><div class="count-number">${String(remaining).padStart(2, "0")}</div><div class="count-label">${remaining <= 1 ? "IGNITION SEQUENCE" : "VEHICLE IS GO"}</div><div class="progress-track"><span style="width:${(10 - (f.countdown || 0)) * 10}%"></span></div><div class="count-checks"><span>✓ PROPULSION</span><span>✓ GUIDANCE</span><span>✓ CREW SAFETY</span></div><button class="button-quiet" data-action="abort-countdown">ABORT COUNTDOWN</button></div><div class="launch-side"><div class="tag amber">SIMULATED LAUNCH</div><h2>PATHFINDER<br/>Mk.I</h2><p>Launch simulation uses a simplified educational flight model. This is not a certified flight simulator.</p></div></div>`;
+      <div class="launch-layout"><div class="countdown-card glass-panel"><div class="eyebrow">${getMissionName(state.destination)} · T MINUS</div><div class="count-number">${String(remaining).padStart(2, "0")}</div><div class="count-label">${remaining <= 1 ? "IGNITION SEQUENCE" : "VEHICLE IS GO"}</div><div class="progress-track"><span style="width:${(10 - (f.countdown || 0)) * 10}%"></span></div><div class="count-checks"><span>✓ PROPULSION</span><span>✓ GUIDANCE</span><span>✓ CREW SAFETY</span></div><button class="button-quiet" data-action="abort-countdown">ABORT COUNTDOWN</button></div><div class="launch-side"><div class="tag amber">SIMULATED LAUNCH</div><h2>PATHFINDER<br/>Mk.I</h2><p>Launch simulation uses a simplified educational flight model. This is not a certified flight simulator.</p></div></div>`;
   }
   if (state.phase === "launch" || state.phase === "flight") {
     return `${header("FLIGHT DYNAMICS / ASCENT", "Powered ascent", "The vehicle is moving. Control throttle and monitor live flight telemetry.")}
-      <div class="flight-layout">      <div class="flight-left glass-panel"><div class="panel-top"><span>LIVE TELEMETRY</span><span class="tag green"><i class="live-dot"></i> LIVE</span></div><div class="primary-readout"><span>ALTITUDE</span><b data-flight="altitude"><span>${(f.altitude / 1000).toFixed(1)}</span><small> KM</small></b><div class="altitude-bar"><i style="height:${Math.max(3, Math.min(100, f.altitude / 1000 / 100 * 100))}%"></i></div></div><div class="telemetry-grid">${telemetry("VELOCITY", `${format(f.velocity)} m/s`, "velocity")}${telemetry("ACCELERATION", `${format(f.acceleration, 1)} m/s²`, "acceleration")}${telemetry("FUEL", `${format(f.fuel, 1)}%`, "fuel")}${telemetry("MISSION TIME", `T+ ${format(f.elapsed)} s`, "elapsed")}${telemetry("THROTTLE", `${format(f.throttle * 100)}%`, "throttle")}${telemetry("STAGE", `S-${String(f.stage).padStart(2, "0")}`, "stage")}</div><div class="flight-status"><span class="live-dot"></span><span data-flight="engine-status">${f.fuel > 8 ? "ENGINE NOMINAL" : "LOW FUEL WARNING"}</span><small data-flight="structural">STRUCTURAL LOAD · ${format(Math.max(1, f.acceleration / 9.81), 1)} G</small></div></div><div class="flight-actions"><div class="tag cyan">MISSION TARGET · MOON</div><h2>${f.altitude >= 100000 ? "ORBITAL INSERTION" : "ASCENT PROFILE"}</h2><p>${f.altitude >= 100000 ? "Target orbit reached. Deploy your science payload." : "Target: 100 km educational orbit. Keep the vehicle under control."}</p><div class="throttle-block"><div><span>ENGINE THROTTLE</span><b data-flight="throttle-control">${format(f.throttle * 100)}%</b></div><input type="range" min="0" max="100" value="${Math.round(f.throttle * 100)}" data-input="throttle" aria-label="Engine throttle"/></div><div class="control-pad"><button data-action="flight-key" data-key="w">▲<small>THROTTLE</small></button><div><button data-action="flight-key" data-key="a">◀</button><button data-action="flight-key" data-key="s">▼</button><button data-action="flight-key" data-key="d">▶</button></div></div><div class="button-row"><button class="button-quiet" data-action="stage">B · SEPARATE STAGE</button><button class="button-quiet" data-action="camera-reset">RESET VIEW</button></div></div></div><div class="flight-key-hint">FLIGHT CONTROLS <b>W</b> THROTTLE <b>A / D</b> YAW <b>S</b> CUT ENGINE <b>B</b> STAGE · MOUSE DRAG / ZOOM CAMERA</div>`;
+      <div class="flight-layout">      <div class="flight-left glass-panel"><div class="panel-top"><span>LIVE TELEMETRY</span><span class="tag green"><i class="live-dot"></i> LIVE</span></div><div class="primary-readout"><span>ALTITUDE</span><b data-flight="altitude"><span>${(f.altitude / 1000).toFixed(1)}</span><small> KM</small></b><div class="altitude-bar"><i style="height:${Math.max(3, Math.min(100, f.altitude / 1000 / 100 * 100))}%"></i></div></div><div class="telemetry-grid">${telemetry("VELOCITY", `${format(f.velocity)} m/s`, "velocity")}${telemetry("ACCELERATION", `${format(f.acceleration, 1)} m/s²`, "acceleration")}${telemetry("FUEL", `${format(f.fuel, 1)}%`, "fuel")}${telemetry("MISSION TIME", `T+ ${format(f.elapsed)} s`, "elapsed")}${telemetry("THROTTLE", `${format(f.throttle * 100)}%`, "throttle")}${telemetry("STAGE", `S-${String(f.stage).padStart(2, "0")}`, "stage")}</div><div class="flight-status"><span class="live-dot"></span><span data-flight="engine-status">${f.fuel > 8 ? "ENGINE NOMINAL" : "LOW FUEL WARNING"}</span><small data-flight="structural">STRUCTURAL LOAD · ${format(Math.max(1, f.acceleration / 9.81), 1)} G</small></div></div><div class="flight-actions"><div class="tag cyan">MISSION TARGET · ${state.destination.toUpperCase()}</div><h2>${f.altitude >= 100000 ? "ORBITAL INSERTION" : "ASCENT PROFILE"}</h2><p>${f.altitude >= 100000 ? "Target orbit reached. Deploy your science payload." : `Target: 100 km educational orbit for ${state.destination}. Keep the vehicle under control.`}</p><div class="throttle-block"><div><span>ENGINE THROTTLE</span><b data-flight="throttle-control">${format(f.throttle * 100)}%</b></div><input type="range" min="0" max="100" value="${Math.round(f.throttle * 100)}" data-input="throttle" aria-label="Engine throttle"/></div><div class="control-pad"><button data-action="flight-key" data-key="w">▲<small>THROTTLE</small></button><div><button data-action="flight-key" data-key="a">◀</button><button data-action="flight-key" data-key="s">▼</button><button data-action="flight-key" data-key="d">▶</button></div></div><div class="button-row"><button class="button-quiet" data-action="stage">B · SEPARATE STAGE</button><button class="button-quiet" data-action="camera-reset">RESET VIEW</button></div></div></div><div class="flight-key-hint">FLIGHT CONTROLS <b>W</b> THROTTLE <b>A / D</b> YAW <b>S</b> CUT ENGINE <b>B</b> STAGE · MOUSE DRAG / ZOOM CAMERA</div>`;
   }
   if (state.phase === "orbit") {
     return `${header("ORBITAL OPERATIONS / PAYLOAD", "Orbit achieved", "A stable educational orbit. Your payload and astronaut science objectives are next.")}
-      <div class="orbit-layout"><div class="orbit-card glass-panel"><div class="orbit-success"><span>✓</span> ORBIT INSERTION SUCCESSFUL</div><h2>The Moon is<br/><em>in reach.</em></h2><p>Pathfinder reached the target orbital band. Deploy the science payload, then begin your surface mission.</p><div class="orbit-facts"><span>ORBITAL ALTITUDE<b>${(f.altitude / 1000).toFixed(1)} km</b></span><span>CREW STATUS<b>NOMINAL · 3 / 3</b></span><span>PAYLOAD LINK<b>${f.deployed ? "ACTIVE" : "STANDBY"}</b></span></div>${f.deployed ? '<button class="button-primary" data-action="begin-eva">BEGIN LUNAR EVA <span>↗</span></button>' : '<button class="button-primary" data-action="deploy-payload">DEPLOY SCIENCE PAYLOAD <span>↗</span></button>'}</div><div class="orbit-side glass-panel"><div class="panel-top"><span>ORBITAL ASSETS</span><span class="tag cyan">1 SPACECRAFT</span></div><div class="asset-row"><span class="asset-icon">▲</span><span><b>PATHFINDER Mk.I</b><small>CREWED VEHICLE · NOMINAL</small></span><span class="asset-dot green-dot"></span></div><div class="asset-row ${f.deployed ? "" : "muted"}"><span class="asset-icon">▦</span><span><b>LUNAR SCOUT-01</b><small>${f.deployed ? "PAYLOAD · COMMUNICATIONS ACTIVE" : "SCIENCE PAYLOAD · STOWED"}</small></span><span class="asset-dot ${f.deployed ? "green-dot" : ""}"></span></div><div class="science-note"><span>i</span> Payload deployment is a one-way mission event. After deploying, you can focus the camera on the new orbital asset.</div><button class="button-quiet full-width" data-action="camera-mode">◫ &nbsp; SWITCH CAMERA FOCUS</button></div></div>`;
+      <div class="orbit-layout"><div class="orbit-card glass-panel"><div class="orbit-success"><span>✓</span> ORBIT INSERTION SUCCESSFUL</div><h2>${state.destination}<br/><em>is in reach.</em></h2><p>Pathfinder reached the target orbital band. Deploy the science payload, then begin your surface mission.</p><div class="orbit-facts"><span>ORBITAL ALTITUDE<b>${(f.altitude / 1000).toFixed(1)} km</b></span><span>CREW STATUS<b>NOMINAL · 3 / 3</b></span><span>PAYLOAD LINK<b>${f.deployed ? "ACTIVE" : "STANDBY"}</b></span></div>${f.deployed ? '<button class="button-primary" data-action="begin-eva">BEGIN SURFACE EVA <span>↗</span></button>' : '<button class="button-primary" data-action="deploy-payload">DEPLOY SCIENCE PAYLOAD <span>↗</span></button>'}</div><div class="orbit-side glass-panel"><div class="panel-top"><span>ORBITAL ASSETS</span><span class="tag cyan">1 SPACECRAFT</span></div><div class="asset-row"><span class="asset-icon">▲</span><span><b>PATHFINDER Mk.I</b><small>CREWED VEHICLE · NOMINAL</small></span><span class="asset-dot green-dot"></span></div><div class="asset-row ${f.deployed ? "" : "muted"}"><span class="asset-icon">▦</span><span><b>${state.destination.toUpperCase()} PROBE</b><small>${f.deployed ? "PAYLOAD · COMMUNICATIONS ACTIVE" : "SCIENCE PAYLOAD · STOWED"}</small></span><span class="asset-dot ${f.deployed ? "green-dot" : ""}"></span></div><div class="science-note"><span>i</span> Payload deployment is a one-way mission event. After deploying, you can focus the camera on the new orbital asset.</div><button class="button-quiet full-width" data-action="camera-mode">◫ &nbsp; SWITCH CAMERA FOCUS</button></div></div>`;
   }
   return `${header("FLIGHT DYNAMICS / ASCENT", "Flight systems standby", "Complete mission selection and engineering before launch.")}
     <div class="empty-state glass-panel"><span class="empty-mark">⌁</span><h2>Flight deck is waiting.</h2><p>Select a destination and configure the spacecraft to begin.</p><button class="button-primary" data-action="navigate" data-screen="missions">SELECT A MISSION <span>↗</span></button></div>`;
@@ -246,15 +264,17 @@ function navigate(screen) {
   render();
 }
 
-function beginMission() {
-  state.destination = "Moon";
+function beginMission(destination = state.destination || "Moon") {
+  const target = PLANETS.find((planet) => planet.name === destination) || PLANETS[0];
+  state.destination = target.name;
   state.phase = "engineering";
   state.screen = "engineering";
   state.flight = { altitude: 0, velocity: 0, fuel: 100, throttle: 0, elapsed: 0, stage: 1, acceleration: 0, deployed: false, countdown: 10 };
   state.astronaut = { oxygen: 100, health: 100, fatigue: 0, repairedArray: false, repairedRover: false, samples: 0, x: 3.6, z: 0 };
   state.missionScience = 0;
   activeCategory = "ALL";
-  showToast("Lunar Frontier 01 initialized. Configure your vehicle.");
+  const missionLabel = getMissionName(target.name);
+  showToast(`${missionLabel} initialized. Configure your vehicle.`);
   render();
 }
 
@@ -424,7 +444,7 @@ function completeMission() {
     return;
   }
   const score = Math.round(1000 + state.flight.fuel * 4 + state.missionScience * 150 + (a.oxygen > 20 ? 300 : 0));
-  const record = { name: "Lunar Frontier 01", destination: "Moon", score, date: new Intl.DateTimeFormat("en", { day: "2-digit", month: "short", year: "numeric" }).format(new Date()) };
+  const record = { name: getMissionName(state.destination), destination: state.destination, score, date: new Intl.DateTimeFormat("en", { day: "2-digit", month: "short", year: "numeric" }).format(new Date()) };
   state.progression.missions.push(record);
   state.progression.score += score;
   state.phase = "complete";
@@ -445,19 +465,90 @@ function showToast(message) {
 }
 
 let audioContext;
+let ambientInterval = null;
+let ambientOscillators = [];
+
+function stopAmbientLoop() {
+  if (ambientInterval) {
+    clearInterval(ambientInterval);
+    ambientInterval = null;
+  }
+  ambientOscillators.forEach((oscillator) => {
+    try {
+      oscillator.stop();
+    } catch (error) {
+      // Oscilloscope is already stopped or not running.
+    }
+  });
+  ambientOscillators = [];
+}
+
+function startAmbientLoop() {
+  if (state.settings.mute || state.settings.volume === 0 || !audioContext || audioContext.state !== "running") return;
+  if (ambientInterval) return;
+
+  const notes = [174.61, 220, 261.63, 329.63];
+  const master = audioContext.createGain();
+  master.gain.value = Math.min(state.settings.volume / 1200, 0.015);
+  master.connect(audioContext.destination);
+
+  const oscillators = [
+    audioContext.createOscillator(),
+    audioContext.createOscillator()
+  ];
+
+  oscillators.forEach((oscillator, index) => {
+    oscillator.type = "sine";
+    oscillator.frequency.value = notes[index];
+    oscillator.connect(master);
+    oscillator.start();
+  });
+  ambientOscillators = oscillators;
+
+  let index = 0;
+  ambientInterval = window.setInterval(() => {
+    if (!audioContext || state.settings.mute || state.settings.volume === 0) return;
+    const base = notes[index % notes.length];
+    oscillators[0].frequency.setTargetAtTime(base, audioContext.currentTime, 1.2);
+    oscillators[1].frequency.setTargetAtTime(base * 2, audioContext.currentTime, 1.2);
+    index += 1;
+  }, 2600);
+}
+
+async function ensureAudio() {
+  if (state.settings.mute || state.settings.volume === 0) return;
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return;
+  if (!audioContext) {
+    audioContext = new AudioCtor();
+  }
+  if (audioContext.state === "suspended") {
+    try {
+      await audioContext.resume();
+    } catch (error) {
+      console.warn("Audio context could not resume.", error);
+    }
+  }
+  if (audioContext.state === "running") {
+    startAmbientLoop();
+  }
+}
+
 function playTone(frequency, duration) {
   if (state.settings.mute || state.settings.volume === 0) return;
   try {
-    audioContext = audioContext || new AudioContext();
-    const oscillator = audioContext.createOscillator();
-    const gain = audioContext.createGain();
+    ensureAudio();
+    const context = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+    if (context.state === "suspended") return;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
     oscillator.type = "sine";
     oscillator.frequency.value = frequency;
     gain.gain.value = Math.min(state.settings.volume / 400, 0.08);
     oscillator.connect(gain);
-    gain.connect(audioContext.destination);
+    gain.connect(context.destination);
     oscillator.start();
-    oscillator.stop(audioContext.currentTime + duration);
+    oscillator.stop(context.currentTime + duration);
   } catch (error) {
     console.warn("Audio feedback is unavailable.", error);
   }
@@ -472,6 +563,7 @@ function action(actionName, target) {
       else navigate(state.phase === "engineering" ? "engineering" : ["countdown", "flight", "orbit"].includes(state.phase) ? "flight" : state.phase === "inspection" ? "inspection" : "exploration");
       break;
     case "select-moon": beginMission(); break;
+    case "select-destination": beginMission(target.destination || state.destination); break;
     case "locked-destination": showToast("This destination is planned for a future build. The Moon is the currently playable mission."); break;
     case "category": activeCategory = target.category; render(); break;
     case "toggle-part": {
@@ -539,7 +631,12 @@ function action(actionName, target) {
       showToast(item.ok ? `${item.name}: pass. System ready.` : `${item.name}: ${item.reason}`);
       break;
     }
-    case "mute": state.settings.mute = !state.settings.mute; render(); break;
+    case "mute":
+      state.settings.mute = !state.settings.mute;
+      if (state.settings.mute) stopAmbientLoop();
+      else ensureAudio();
+      render();
+      break;
     case "remap-key": keyCapture = target.binding; render(); showToast("Press the key you'd like to assign."); break;
     case "reset": {
       if (confirm("Reset all ORBITAL FRONTIER progress on this device? This cannot be undone.")) {
@@ -582,6 +679,8 @@ function init() {
       saveState(state);
     } else if (event.target.dataset.input === "volume") {
       state.settings.volume = Number(event.target.value);
+      if (state.settings.volume === 0) stopAmbientLoop();
+      else ensureAudio();
       const value = event.target.parentElement.querySelector("b");
       if (value) value.textContent = `${state.settings.volume}%`;
       saveState(state);
@@ -598,7 +697,9 @@ function init() {
       saveState(state);
     }
   });
+  document.addEventListener("pointerdown", () => { ensureAudio(); }, { passive: true });
   document.addEventListener("keydown", (event) => {
+    ensureAudio();
     if (keyCapture) {
       event.preventDefault();
       state.settings.controls[keyCapture] = event.key.toLowerCase();

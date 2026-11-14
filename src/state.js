@@ -21,7 +21,7 @@ const initialState = {
   flight: { altitude: 0, velocity: 0, fuel: 100, throttle: 0, elapsed: 0, stage: 1, acceleration: 0, deployed: false },
   astronaut: { oxygen: 100, health: 100, fatigue: 0, repairedArray: false, repairedRover: false, samples: 0, x: 3.6, z: 0 },
   missionScience: 0,
-  progression: { missions: [], score: 0, unlocked: ["Moon"], science: 0 },
+  progression: { missions: [], score: 0, unlocked: ["Moon", "Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"], science: 0 },
   settings: { quality: "High", volume: 35, mute: false, controls: { pitchUp: "w", pitchDown: "s", yawLeft: "a", yawRight: "d", stage: "b" } },
   notice: ""
 };
