@@ -7,10 +7,24 @@ export const PARTS = {
   life: { name: "Life-support unit", category: "Systems", mass: 3, life: 2, icon: "♡", description: "Oxygen and cabin regulation" },
   comms: { name: "Deep-space comms", category: "Systems", mass: 2, comms: 120, icon: "⌁", description: "Long-range mission antenna" },
   shield: { name: "Thermal shield", category: "Structure", mass: 4, heat: 85, icon: "◈", description: "Atmospheric-entry protection" },
-  legs: { name: "Lunar landing gear", category: "Landing", mass: 3, landing: 80, icon: "⌑", description: "Shock-absorbing surface struts" },
+  legs: { name: "Surface landing gear", category: "Landing", mass: 3, landing: 80, icon: "⌑", description: "Shock-absorbing landing struts" },
   panels: { name: "Solar array", category: "Payload", mass: 2, power: 45, icon: "▦", description: "Deployable orbital power panels" },
-  rover: { name: "Aster rover", category: "Payload", mass: 6, science: 2, icon: "▰", description: "Two-seat lunar science rover" },
+  rover: { name: "Science rover", category: "Payload", mass: 6, science: 2, icon: "▰", description: "Mobile science platform for surface missions" },
   shield2: { name: "Radiation liner", category: "Structure", mass: 5, radiation: 40, icon: "⬟", description: "Crew radiation shielding" }
+};
+
+export const DEFAULT_VEHICLE_COLORS = {
+  noseCone: "#48d8ed",
+  crewSection: "#dce8ed",
+  mainBody: "#dce8ed",
+  engine: "#263d4c",
+  boosters: "#dce8ed",
+  fuelTank: "#d79b45",
+  fins: "#263d4c",
+  landingGear: "#263d4c",
+  solarPanels: "#245f93",
+  sciencePayload: "#d79b45",
+  payloadAntenna: "#dce8ed"
 };
 
 const initialState = {
@@ -21,21 +35,41 @@ const initialState = {
   flight: { altitude: 0, velocity: 0, fuel: 100, throttle: 0, elapsed: 0, stage: 1, acceleration: 0, deployed: false },
   astronaut: { oxygen: 100, health: 100, fatigue: 0, repairedArray: false, repairedRover: false, samples: 0, x: 3.6, z: 0 },
   missionScience: 0,
-  progression: { missions: [], score: 0, unlocked: ["Moon", "Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"], science: 0 },
+  missionObjectives: {},
+  progression: { missions: [], score: 0, unlocked: ["Moon"], science: 0 },
+  vehicleColors: { ...DEFAULT_VEHICLE_COLORS },
   settings: { quality: "High", volume: 35, mute: false, controls: { pitchUp: "w", pitchDown: "s", yawLeft: "a", yawRight: "d", stage: "b" } },
   notice: ""
 };
+
+function loadVehicleColors(savedColors) {
+  return Object.fromEntries(Object.entries(DEFAULT_VEHICLE_COLORS).map(([part, defaultColor]) => {
+    const color = savedColors?.[part];
+    return [part, typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color) ? color : defaultColor];
+  }));
+}
 
 export function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem("orbital-frontier-save"));
     if (!saved || typeof saved !== "object") return initialState;
+    const missions = Array.isArray(saved.progression?.missions) ? saved.progression.missions : [];
+    const moonComplete = missions.some((mission) => mission?.destination === "Moon");
     return {
       ...initialState, ...saved,
       flight: { ...initialState.flight, ...saved.flight },
       astronaut: { ...initialState.astronaut, ...saved.astronaut },
       missionScience: Number.isFinite(saved.missionScience) ? saved.missionScience : 0,
-      progression: { ...initialState.progression, ...saved.progression },
+      missionObjectives: saved.missionObjectives && typeof saved.missionObjectives === "object" ? saved.missionObjectives : {},
+      progression: {
+        ...initialState.progression,
+        ...saved.progression,
+        missions,
+        unlocked: moonComplete
+          ? ["Moon", "Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"]
+          : ["Moon"]
+      },
+      vehicleColors: loadVehicleColors(saved.vehicleColors),
       settings: { ...initialState.settings, ...saved.settings, controls: { ...initialState.settings.controls, ...(saved.settings?.controls || {}) } },
       loadout: Array.isArray(saved.loadout) ? saved.loadout : initialState.loadout
     };
@@ -75,17 +109,22 @@ export function getStats(state) {
 }
 
 export function inspection(state) {
+  const surfaceMission = ["Moon", "Mars"].includes(state.destination);
   const checks = [
     ["Fuel tank", state.loadout.includes("tank"), "Install a cryogenic fuel tank to supply the engines."],
     ["Main engine", state.loadout.includes("engine"), "Install a main engine before attempting launch."],
-    ["Crew capsule", state.loadout.includes("capsule"), "The crew capsule is required for a crewed Moon mission."],
+    ["Crew capsule", state.loadout.includes("capsule"), "Install the crew capsule for this expedition."],
     ["Life support", state.loadout.includes("life"), "Install a life-support unit for the crew."],
     ["Communications", state.loadout.includes("comms"), "Deep-space communications are required for navigation."],
     ["Thermal shield", state.loadout.includes("shield"), "A thermal shield is required for safe return."],
-    ["Landing system", state.loadout.includes("legs"), "Lunar landing gear is required for the surface objective."],
-    ["Science rover", state.loadout.includes("rover"), "Install the Aster rover to support lunar surface science."],
     ["Solar array", state.loadout.includes("panels"), "Install solar panels for the orbital science payload."],
     ["Launch thrust", getStats(state).twr >= 1.1, "Current thrust-to-weight is too low. Add an engine or booster."]
   ];
+  if (surfaceMission) {
+    checks.splice(6, 0,
+      ["Landing system", state.loadout.includes("legs"), "Install landing gear for the crewed surface mission."],
+      ["Science rover", state.loadout.includes("rover"), "Install the science rover for the surface objectives."]
+    );
+  }
   return checks.map(([name, ok, reason]) => ({ name, ok, reason }));
 }

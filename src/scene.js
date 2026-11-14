@@ -26,6 +26,10 @@ export class FrontierScene {
     this.clock = new THREE.Clock();
     this.frameCount = 0;
     this.fpsTime = performance.now();
+    this.previousFrameTime = this.fpsTime;
+    this.vehicleColors = {};
+    this.customizableMaterials = {};
+    this.showcaseActive = false;
     if (import.meta.env.DEV) {
       this.fpsIndicator = document.createElement("div");
       this.fpsIndicator.className = "fps-indicator";
@@ -35,6 +39,8 @@ export class FrontierScene {
     this.model = new THREE.Group();
     this.scene.add(this.model);
     this.planet = null;
+    this.planetTextureCache = new Map();
+    this.activeDestination = "Moon";
     this.exhaust = null;
     this.rocketY = 0;
     this.current = null;
@@ -44,6 +50,33 @@ export class FrontierScene {
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas.parentElement);
     this.animate();
+  }
+
+  setVehicleColors(colors = {}) {
+    for (const [part, color] of Object.entries(colors)) {
+      if (typeof color !== "string" || !/^#[0-9a-f]{6}$/i.test(color)) continue;
+      const roots = this.customizableParts[part];
+      if (!roots) continue;
+      if (!this.customizableMaterials[part]) {
+        const materials = [];
+        for (const root of roots) {
+          root.traverse((object) => {
+            if (!object.isMesh) return;
+            if (Array.isArray(object.material)) {
+              object.material = object.material.map((source) => source.clone());
+              materials.push(...object.material);
+            } else {
+              object.material = object.material.clone();
+              materials.push(object.material);
+            }
+          });
+        }
+        this.customizableMaterials[part] = materials;
+      }
+      if (this.vehicleColors[part] === color) continue;
+      this.customizableMaterials[part].forEach((material) => material.color.set(color));
+      this.vehicleColors[part] = color;
+    }
   }
 
   buildEnvironment() {
@@ -65,18 +98,19 @@ export class FrontierScene {
       points[i + 2] = (Math.random() - 0.5) * 950;
     }
     starGeometry.setAttribute("position", new THREE.BufferAttribute(points, 3));
-    this.scene.add(new THREE.Points(starGeometry, new THREE.PointsMaterial({ color: "#b8d9ff", size: 0.65, sizeAttenuation: true })));
+    this.stars = new THREE.Points(starGeometry, new THREE.PointsMaterial({ color: "#b8d9ff", size: 0.65, sizeAttenuation: true }));
+    this.scene.add(this.stars);
 
-    const ground = new THREE.Mesh(new THREE.CircleGeometry(240, 80), material("#1b2630", 0.15, 0.87));
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.15;
-    ground.receiveShadow = true;
-    this.scene.add(ground);
-    const grid = new THREE.GridHelper(180, 36, "#1a5262", "#182d3b");
-    grid.position.y = -0.12;
-    grid.material.transparent = true;
-    grid.material.opacity = 0.28;
-    this.scene.add(grid);
+    this.ground = new THREE.Mesh(new THREE.CircleGeometry(240, 80), material("#1b2630", 0.15, 0.87));
+    this.ground.rotation.x = -Math.PI / 2;
+    this.ground.position.y = -0.15;
+    this.ground.receiveShadow = true;
+    this.scene.add(this.ground);
+    this.groundGrid = new THREE.GridHelper(180, 36, "#1a5262", "#182d3b");
+    this.groundGrid.position.y = -0.12;
+    this.groundGrid.material.transparent = true;
+    this.groundGrid.material.opacity = 0.28;
+    this.scene.add(this.groundGrid);
 
     this.launchSite = new THREE.Group();
     this.scene.add(this.launchSite);
@@ -125,15 +159,17 @@ export class FrontierScene {
       this.launchSite.add(cap);
     }
 
+    const moonTexture = this.makePlanetTexture("Moon");
     this.planet = new THREE.Mesh(new THREE.SphereGeometry(3.2, 48, 36), new THREE.MeshStandardMaterial({
-      color: "#62778a", roughness: 0.92, metalness: 0.02,
-      bumpMap: this.makeLunarTexture(), bumpScale: 0.22
+      color: "#ffffff", roughness: 0.92, metalness: 0.02,
+      map: moonTexture, bumpMap: moonTexture, bumpScale: 0.16
     }));
+    this.planetTextureCache.set("Moon", this.planet.material.map);
     this.planet.position.set(-9, 1.1, -8);
     this.scene.add(this.planet);
-    const aura = new THREE.Mesh(new THREE.SphereGeometry(3.32, 48, 36), new THREE.MeshBasicMaterial({ color: "#6ac9ec", transparent: true, opacity: 0.06, side: THREE.BackSide }));
-    aura.position.copy(this.planet.position);
-    this.scene.add(aura);
+    this.planetAura = new THREE.Mesh(new THREE.SphereGeometry(3.32, 48, 36), new THREE.MeshBasicMaterial({ color: "#6ac9ec", transparent: true, opacity: 0.06, side: THREE.BackSide }));
+    this.planetAura.position.copy(this.planet.position);
+    this.scene.add(this.planetAura);
 
     this.exhaust = new THREE.Mesh(new THREE.ConeGeometry(0.55, 3.2, 20, 1, true), new THREE.MeshBasicMaterial({ color: "#ff9f45", transparent: true, opacity: 0.72, side: THREE.DoubleSide }));
     this.exhaust.rotation.x = Math.PI;
@@ -152,25 +188,73 @@ export class FrontierScene {
     this.launchSite.position.set(0, -0.16, 0);
   }
 
-  makeLunarTexture() {
+  makePlanetTexture(destination) {
     const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 256;
+    canvas.width = 512;
+    canvas.height = 256;
     const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#777";
-    ctx.fillRect(0, 0, 256, 256);
+    const palette = {
+      Moon: ["#7d858b", "#a9afb2", "#343a3e"],
+      Mercury: ["#77746e", "#aaa49a", "#393733"],
+      Venus: ["#b8844d", "#e0bd79", "#8d5b39"],
+      Earth: ["#173d64", "#58a06f", "#d3d4c7"],
+      Mars: ["#8b422c", "#c56a44", "#492b28"],
+      Jupiter: ["#b98e67", "#e4c49b", "#815a49"],
+      Saturn: ["#b5965f", "#dfc58b", "#806744"],
+      Uranus: ["#559aa4", "#9ac9c7", "#39717e"],
+      Neptune: ["#254f9b", "#4b82cf", "#142f68"]
+    };
+    const [base, land, shadow] = palette[destination] || palette.Moon;
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     let seed = 7;
     const random = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
-    for (let i = 0; i < 260; i += 1) {
-      const r = 1 + random() * 12;
-      const x = random() * 256;
-      const y = random() * 256;
-      ctx.fillStyle = random() > 0.5 ? "rgba(25,30,35,.28)" : "rgba(220,225,230,.12)";
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
+    if (["Jupiter", "Saturn", "Uranus", "Neptune"].includes(destination)) {
+      for (let y = 0; y < canvas.height; y += 1) {
+        const wave = Math.sin(y * 0.055) * 4 + Math.sin(y * 0.019) * 7;
+        if (y % 22 < 10) {
+          ctx.globalAlpha = 0.2 + random() * 0.25;
+          ctx.fillStyle = random() > 0.5 ? land : shadow;
+          ctx.fillRect(0, y + wave, canvas.width, 7 + random() * 12);
+        }
+      }
+      if (destination === "Jupiter") {
+        ctx.globalAlpha = 0.75;
+        ctx.fillStyle = "#a85c43";
+        ctx.beginPath();
+        ctx.ellipse(335, 154, 34, 17, -0.08, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (destination === "Earth") {
+      ctx.globalAlpha = 0.8;
+      ctx.fillStyle = land;
+      for (const [x, y, rx, ry] of [[105, 78, 40, 25], [162, 137, 27, 44], [301, 82, 54, 29], [398, 164, 47, 27]]) {
+        ctx.beginPath();
+        ctx.ellipse(x, y, rx, ry, random() * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (destination === "Venus") {
+      for (let y = 0; y < canvas.height; y += 1) {
+        ctx.globalAlpha = 0.08 + random() * 0.11;
+        ctx.fillStyle = random() > 0.5 ? land : shadow;
+        ctx.fillRect(0, y, canvas.width, 2 + random() * 9);
+      }
+    } else {
+      for (let i = 0; i < 180; i += 1) {
+        const r = destination === "Moon" || destination === "Mercury" ? 2 + random() * 12 : 2 + random() * 7;
+        const x = random() * canvas.width;
+        const y = random() * canvas.height;
+        ctx.globalAlpha = 0.1 + random() * 0.2;
+        ctx.fillStyle = random() > 0.5 ? shadow : land;
+        ctx.beginPath();
+        ctx.ellipse(x, y, r, r * (0.35 + random() * 0.4), 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
+    ctx.globalAlpha = 1;
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
     return texture;
   }
 
@@ -187,11 +271,15 @@ export class FrontierScene {
       parent.add(mesh);
       return mesh;
     };
-    this.model.add(addCylinder(this.model, 0.9, 1.1, 5.2, white, -0.05));
-    this.model.add(addCylinder(this.model, 0.88, 0.94, 1.8, dark, -1.05));
-    this.model.add(addCylinder(this.model, 0.76, 0.88, 1.25, white, 2.9));
+    const mainBody = addCylinder(this.model, 0.9, 1.1, 5.2, white, -0.05);
+    const engineSection = addCylinder(this.model, 0.88, 0.94, 1.8, dark, -1.05);
+    const crewSection = addCylinder(this.model, 0.76, 0.88, 1.25, white, 2.9);
     const capsule = addCylinder(this.model, 0.04, 0.76, 1.3, blue, 4.15);
     capsule.geometry = new THREE.ConeGeometry(0.76, 1.3, 24);
+    const engineBell = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.58, 0.82, 24), dark);
+    engineBell.position.y = -3.0;
+    engineBell.castShadow = true;
+    this.model.add(engineBell);
     const noseWindow = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 12), material("#182b3d", 0.4, 0.1));
     noseWindow.position.set(0, 4.15, 0.62);
     this.model.add(noseWindow);
@@ -206,6 +294,7 @@ export class FrontierScene {
       this.boosters.push(booster);
     }
     this.tank = addCylinder(this.model, 0.75, 0.75, 1.2, gold, -2.0);
+    this.engineBell = engineBell;
     this.solar = new THREE.Group();
     const panel = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 0.75), material("#245f93", 0.45, 0.35));
     panel.position.set(2.1, 2.15, 0);
@@ -242,22 +331,39 @@ export class FrontierScene {
     this.model.add(this.fins);
 
     this.payload = new THREE.Group();
+    const payloadBody = new THREE.Group();
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.66, 0.7), gold);
     body.castShadow = true;
-    this.payload.add(body);
+    payloadBody.add(body);
+    const payloadAntenna = new THREE.Group();
     const dish = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), white);
     dish.position.y = 0.36;
     dish.rotation.x = Math.PI;
-    this.payload.add(dish);
+    payloadAntenna.add(dish);
+    const payloadPanels = new THREE.Group();
     const payloadPanel = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.06, 0.64), material("#245f93", 0.45, 0.35));
     payloadPanel.position.set(1.48, 0, 0);
-    this.payload.add(payloadPanel);
+    payloadPanels.add(payloadPanel);
     const payloadPanel2 = payloadPanel.clone();
     payloadPanel2.position.x = -1.48;
-    this.payload.add(payloadPanel2);
+    payloadPanels.add(payloadPanel2);
+    this.payload.add(payloadBody, payloadAntenna, payloadPanels);
     this.payload.position.set(1.7, 5, 0);
     this.payload.visible = false;
     this.scene.add(this.payload);
+    this.customizableParts = {
+      noseCone: [capsule],
+      crewSection: [crewSection],
+      mainBody: [mainBody],
+      engine: [engineSection, engineBell],
+      boosters: this.boosters,
+      fuelTank: [this.tank],
+      fins: [this.fins],
+      landingGear: [this.legs],
+      solarPanels: [this.solar, payloadPanels],
+      sciencePayload: [payloadBody],
+      payloadAntenna: [payloadAntenna]
+    };
 
     this.astronaut = new THREE.Group();
     const suit = material("#e8edf0", 0.15, 0.8);
@@ -299,23 +405,40 @@ export class FrontierScene {
 
   update(state) {
     this.current = state;
+    this.setVehicleColors(state.vehicleColors);
+    if (this.activeDestination !== state.destination) {
+      if (!this.planetTextureCache.has(state.destination)) {
+        this.planetTextureCache.set(state.destination, this.makePlanetTexture(state.destination));
+      }
+      const texture = this.planetTextureCache.get(state.destination);
+      this.planet.material.map = texture;
+      this.planet.material.bumpMap = texture;
+      this.planet.material.color.set("#ffffff");
+      this.planet.material.needsUpdate = true;
+      this.planetAura.material.color.set(({ Moon: "#6ac9ec", Mercury: "#b5b1a7", Venus: "#e5ad68", Earth: "#55a8ff", Mars: "#e77750", Jupiter: "#dfad83", Saturn: "#dfc58b", Uranus: "#72d3d0", Neptune: "#618cf4" })[state.destination] || "#6ac9ec");
+      this.ground.material.color.set(({ Moon: "#1b2630", Mars: "#422a26", Earth: "#1d332b" })[state.destination] || "#1b2630");
+      this.activeDestination = state.destination;
+    }
+    const showcase = state.screen === "showcase";
+    const surfaceMission = ["Moon", "Mars"].includes(state.destination);
+    const surfaceView = surfaceMission && ["exploration", "complete"].includes(state.phase);
     const has = (id) => state.loadout.includes(id);
-    this.boosters.forEach((booster) => { booster.visible = has("booster") && state.flight.stage === 1; });
+    this.boosters.forEach((booster) => { booster.visible = has("booster") && (state.flight.stage === 1 || showcase); });
     this.tank.visible = has("tank");
-    this.solar.visible = has("panels") && !state.flight.deployed;
+    this.solar.visible = has("panels") && (!state.flight.deployed || showcase);
     this.legs.visible = has("legs");
     this.fins.visible = has("core");
     const ignition = state.phase === "flight" || state.phase === "launch" || (state.phase === "countdown" && state.flight.countdown <= 1);
-    this.exhaust.visible = ignition && state.flight.throttle > 0;
+    this.exhaust.visible = !showcase && ignition && state.flight.throttle > 0;
     const innerFlame = this.model.getObjectByName("innerFlame");
     innerFlame.visible = this.exhaust.visible;
-    this.payload.visible = state.flight.deployed;
-    this.astronaut.visible = state.phase === "eva" || state.phase === "exploration" || state.phase === "complete";
+    this.payload.visible = !showcase && state.flight.deployed;
+    this.astronaut.visible = !showcase && surfaceMission && (state.phase === "exploration" || state.phase === "complete");
     const ascending = state.phase === "launch" || state.phase === "flight";
     const visualRise = ascending ? Math.min(state.flight.altitude / 1000, 72) : 0;
-    this.model.position.y = 3.8 + visualRise;
+    this.model.position.y = showcase ? 3.8 : 3.8 + visualRise;
     this.rocketY = this.model.position.y;
-    if (state.phase === "eva" || state.phase === "exploration" || state.phase === "complete") {
+    if (surfaceView) {
       this.planet.position.set(0, -6.5, -12);
       this.planet.scale.setScalar(1.8);
       this.camera.position.set(9, 6, 16);
@@ -324,23 +447,50 @@ export class FrontierScene {
       this.planet.position.set(-9, 1.1, -8);
       this.planet.scale.setScalar(1);
     }
-    if (state.phase === "orbit") {
-      this.camera.position.set(13, this.model.position.y + 10, 18);
-      this.controls.target.set(0, this.model.position.y, 0);
-    } else if (state.phase === "flight" || state.phase === "launch") {
-      const follow = 0.35 + Math.min(visualRise / 18, 1) * 0.57;
-      const targetY = 3.8 + visualRise * follow;
-      this.controls.target.y += (targetY - this.controls.target.y) * 0.18;
-      this.camera.position.y += (this.controls.target.y + 10 - this.camera.position.y) * 0.18;
-    } else if (state.screen === "engineering" || state.screen === "inspection" || state.screen === "control") {
+    const nearLaunchSite = state.flight.altitude < 6000 && !["orbit", "operations", "eva", "exploration", "complete"].includes(state.phase);
+    this.ground.visible = !showcase && nearLaunchSite;
+    this.groundGrid.visible = !showcase && nearLaunchSite;
+    this.planet.visible = !showcase;
+    this.planetAura.visible = !showcase;
+    if (showcase && !this.showcaseActive) {
+      this.showcaseCamera = {
+        position: this.camera.position.clone(),
+        target: this.controls.target.clone(),
+        minDistance: this.controls.minDistance,
+        maxDistance: this.controls.maxDistance
+      };
+      this.camera.position.set(13, 9.5, 20);
       this.controls.target.set(0, 3.8, 0);
+      this.controls.minDistance = 8;
+      this.controls.maxDistance = 42;
+      this.controls.update();
+      this.showcaseActive = true;
+    } else if (!showcase && this.showcaseActive) {
+      this.camera.position.copy(this.showcaseCamera.position);
+      this.controls.target.copy(this.showcaseCamera.target);
+      this.controls.minDistance = this.showcaseCamera.minDistance;
+      this.controls.maxDistance = this.showcaseCamera.maxDistance;
+      this.controls.update();
+      this.showcaseActive = false;
+    }
+    this.launchSite.visible = !showcase && nearLaunchSite;
+    if (!showcase) {
+      if (state.phase === "orbit" || state.phase === "operations" || (state.phase === "complete" && !surfaceMission)) {
+        this.camera.position.set(13, this.model.position.y + 10, 18);
+        this.controls.target.set(0, this.model.position.y, 0);
+      } else if (state.phase === "flight" || state.phase === "launch") {
+        const targetY = this.model.position.y + 0.5;
+        this.controls.target.y += (targetY - this.controls.target.y) * 0.18;
+        this.camera.position.y += (this.controls.target.y + 10 - this.camera.position.y) * 0.18;
+      } else if (state.screen === "engineering" || state.screen === "inspection" || state.screen === "control") {
+        this.controls.target.set(0, 3.8, 0);
+      }
     }
     const throttle = state.flight.throttle;
     const flicker = 0.85 + Math.sin(performance.now() * 0.035) * 0.12;
     this.exhaust.scale.set(0.7 + throttle * 0.45, Math.max(0.08, throttle) * flicker, 0.7 + throttle * 0.45);
     innerFlame.scale.y = Math.max(0.08, throttle) * flicker;
     this.exhaust.material.opacity = 0.28 + throttle * 0.5;
-    this.launchSite.visible = !["eva", "exploration", "complete", "orbit"].includes(state.phase) && state.flight.altitude < 70000;
     this.payload.position.x = state.flight.deployed ? 3.3 + Math.sin(performance.now() * 0.0007) * 0.3 : 1.7;
     this.astronaut.position.x = state.astronaut.x ?? 3.6;
     this.astronaut.position.z = state.astronaut.z ?? 0;
@@ -359,14 +509,17 @@ export class FrontierScene {
   animate() {
     this.frame = requestAnimationFrame(() => this.animate());
     const elapsed = this.clock.getElapsedTime();
-    this.frameCount += 1;
     const now = performance.now();
+    const delta = Math.min((now - this.previousFrameTime) / 1000, 0.05);
+    this.previousFrameTime = now;
+    this.frameCount += 1;
     if (this.fpsIndicator && now - this.fpsTime >= 1000) {
       this.fpsIndicator.textContent = `FPS ${Math.round(this.frameCount * 1000 / (now - this.fpsTime))}`;
       this.frameCount = 0;
       this.fpsTime = now;
     }
-    this.model.rotation.y = Math.sin(elapsed * 0.2) * 0.035;
+    if (this.current?.screen === "showcase") this.model.rotation.y += delta * 0.1;
+    else this.model.rotation.y = Math.sin(elapsed * 0.2) * 0.035;
     this.planet.rotation.y += 0.0007;
     if (this.payload.visible) this.payload.rotation.y += 0.005;
     this.controls.update();
